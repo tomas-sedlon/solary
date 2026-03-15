@@ -32,6 +32,11 @@ def api_current():
         "buy_kwh": latest.get("buy_kwh", 0),
         "sell_kwh": latest.get("sell_kwh", 0),
         "min_soc": latest.get("min_soc"),
+        "hp_total_kwh": latest.get("hp_total_kwh"),
+        "hp_heating_kwh": latest.get("hp_heating_kwh"),
+        "hp_hotwater_kwh": latest.get("hp_hotwater_kwh"),
+        "hp_defrost_kwh": latest.get("hp_defrost_kwh"),
+        "hp_solar_kwh": latest.get("hp_solar_kwh"),
         "station_name": os.environ.get("STATION_NAME", "My Solar"),
     })
 

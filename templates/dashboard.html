@@ -84,6 +84,8 @@
         .kpi-card.battery { --accent: #22c55e; }
         .kpi-card.grid-card { --accent: #8b5cf6; }
         .kpi-card.lifetime { --accent: #64748b; }
+        .kpi-card.heatpump { --accent: #ef4444; }
+        .kpi-sub { font-size: 0.65rem; color: #64748b; margin-top: 4px; }
 
         .chart-section {
             background: linear-gradient(145deg, #141c2e 0%, #111827 100%);
@@ -184,6 +186,12 @@
             <div class="kpi-card grid-card">
                 <div class="kpi-label">Grid Buy / Sell</div>
                 <div class="kpi-value" style="font-size:1.3rem"><span id="buyKwh">--</span><span class="unit">kWh</span> / <span id="sellKwh">--</span><span class="unit">kWh</span></div>
+            </div>
+            <div class="kpi-card heatpump">
+                <div class="kpi-label">Heat Pump Today</div>
+                <div class="kpi-value"><span id="hpTotalKwh">--</span><span class="unit">kWh</span></div>
+                <div class="kpi-sub" id="hpBreakdown"></div>
+                <div class="kpi-sub" id="hpSolar" style="color:#fbbf24"></div>
             </div>
             <div class="kpi-card lifetime">
                 <div class="kpi-label">Lifetime</div>
@@ -301,6 +309,26 @@
                         order: 3,
                     },
                     {
+                        label: 'Heat Pump',
+                        data: [],
+                        backgroundColor: 'rgba(239, 68, 68, 0.6)',
+                        hoverBackgroundColor: '#f87171',
+                        borderRadius: 5,
+                        borderSkipped: false,
+                        yAxisID: 'y',
+                        order: 4,
+                    },
+                    {
+                        label: 'HP from Solar',
+                        data: [],
+                        backgroundColor: 'rgba(251, 191, 36, 0.55)',
+                        hoverBackgroundColor: '#fcd34d',
+                        borderRadius: 5,
+                        borderSkipped: false,
+                        yAxisID: 'y',
+                        order: 5,
+                    },
+                    {
                         label: 'Min Battery %',
                         data: [],
                         type: 'bar',
@@ -324,7 +352,7 @@
                             labels: { color: '#64748b', boxWidth: 10, boxHeight: 10, borderRadius: 3, useBorderRadius: true, padding: 14, font: { size: 11, weight: '500' } },
                         },
                         tooltip: { ...tooltipStyle, callbacks: {
-                            label: (c) => { const unit = c.datasetIndex === 2 ? '%' : ' kWh'; return `${c.dataset.label}: ${c.parsed.y}${unit}`; }
+                            label: (c) => { const unit = c.datasetIndex === 4 ? '%' : ' kWh'; return `${c.dataset.label}: ${c.parsed.y}${unit}`; }
                         }},
                     },
                     scales: {
@@ -362,6 +390,26 @@
                         order: 3,
                     },
                     {
+                        label: 'Heat Pump',
+                        data: [],
+                        backgroundColor: 'rgba(239, 68, 68, 0.6)',
+                        hoverBackgroundColor: '#f87171',
+                        borderRadius: 5,
+                        borderSkipped: false,
+                        yAxisID: 'y',
+                        order: 4,
+                    },
+                    {
+                        label: 'HP from Solar',
+                        data: [],
+                        backgroundColor: 'rgba(251, 191, 36, 0.55)',
+                        hoverBackgroundColor: '#fcd34d',
+                        borderRadius: 5,
+                        borderSkipped: false,
+                        yAxisID: 'y',
+                        order: 5,
+                    },
+                    {
                         label: 'Avg Min Battery %',
                         data: [],
                         type: 'bar',
@@ -395,7 +443,7 @@
                         },
                         tooltip: { ...tooltipStyle, callbacks: {
                             label: (c) => {
-                                const unit = c.datasetIndex === 2 ? '%' : ' kWh';
+                                const unit = c.datasetIndex === 4 ? '%' : ' kWh';
                                 return `${c.dataset.label}: ${c.parsed.y}${unit}`;
                             }
                         }},
@@ -437,6 +485,18 @@
                 document.getElementById('buyKwh').textContent = Number(data.buy_kwh || 0).toFixed(1);
                 document.getElementById('sellKwh').textContent = Number(data.sell_kwh || 0).toFixed(1);
                 document.getElementById('batterySoc').textContent = data.min_soc != null ? Number(data.min_soc).toFixed(0) : '--';
+                if (data.hp_total_kwh != null) {
+                    document.getElementById('hpTotalKwh').textContent = Number(data.hp_total_kwh).toFixed(1);
+                    const parts = [];
+                    if (data.hp_heating_kwh) parts.push('Heating ' + Number(data.hp_heating_kwh).toFixed(1));
+                    if (data.hp_hotwater_kwh) parts.push('HW ' + Number(data.hp_hotwater_kwh).toFixed(1));
+                    if (data.hp_defrost_kwh) parts.push('Defrost ' + Number(data.hp_defrost_kwh).toFixed(1));
+                    document.getElementById('hpBreakdown').textContent = parts.join(' · ');
+                }
+                if (data.hp_solar_kwh != null && data.hp_solar_kwh > 0) {
+                    const pct = data.hp_total_kwh > 0 ? Math.round(data.hp_solar_kwh / data.hp_total_kwh * 100) : 0;
+                    document.getElementById('hpSolar').textContent = Number(data.hp_solar_kwh).toFixed(1) + ' kWh from solar (' + pct + '%)';
+                }
                 document.getElementById('stationName').textContent = data.station_name || '';
                 document.getElementById('lastUpdate').textContent = 'Updated ' + new Date().toLocaleTimeString();
 
@@ -469,7 +529,9 @@
                 historyChart.data.labels = data.map(d => new Date(d.date).toLocaleDateString([], { month: 'short', day: 'numeric' }));
                 historyChart.data.datasets[0].data = data.map(d => d.total_kwh);
                 historyChart.data.datasets[1].data = data.map(d => Math.round((d.consumption_kwh || 0) * 10) / 10);
-                historyChart.data.datasets[2].data = data.map(d => d.min_soc != null ? Math.round(d.min_soc) : null);
+                historyChart.data.datasets[2].data = data.map(d => d.hp_total_kwh != null ? Math.round(d.hp_total_kwh * 10) / 10 : null);
+                historyChart.data.datasets[3].data = data.map(d => d.hp_solar_kwh != null ? Math.round(d.hp_solar_kwh * 10) / 10 : null);
+                historyChart.data.datasets[4].data = data.map(d => d.min_soc != null ? Math.round(d.min_soc) : null);
                 historyChart.update();
             } catch (e) { console.error('fetchHistory:', e); }
         }
@@ -483,11 +545,13 @@
 
         // --- Monthly chart helpers ---
 
-        function updateMonthlyChart(labels, production, consumption, battery) {
+        function updateMonthlyChart(labels, production, consumption, heatpump, hpSolar, battery) {
             monthlyChart.data.labels = labels;
             monthlyChart.data.datasets[0].data = production;
             monthlyChart.data.datasets[1].data = consumption;
-            monthlyChart.data.datasets[2].data = battery;
+            monthlyChart.data.datasets[2].data = heatpump;
+            monthlyChart.data.datasets[3].data = hpSolar;
+            monthlyChart.data.datasets[4].data = battery;
             monthlyChart.update();
         }
 
@@ -498,10 +562,12 @@
                 monthlyData.map(d => { const [y, m] = d.month.split('-'); return mn[parseInt(m)-1] + ' ' + y; }),
                 monthlyData.map(d => Math.round((d.total_kwh || 0) * 10) / 10),
                 monthlyData.map(d => Math.round((d.consumption_kwh || 0) * 10) / 10),
+                monthlyData.map(d => d.hp_total_kwh != null ? Math.round(d.hp_total_kwh * 10) / 10 : null),
+                monthlyData.map(d => d.hp_solar_kwh != null ? Math.round(d.hp_solar_kwh * 10) / 10 : null),
                 monthlyData.map(d => d.min_soc != null ? Math.round(d.min_soc) : null),
             );
             monthlyChart.data.datasets[0].backgroundColor = 'rgba(245, 158, 11, 0.75)';
-            monthlyChart.data.datasets[2].label = 'Avg Min Battery %';
+            monthlyChart.data.datasets[4].label = 'Avg Min Battery %';
             monthlyChart.options.onClick = handleMonthlyClick;
             monthlyChart.update();
             document.getElementById('monthlyTitle').textContent = 'Monthly Overview';
@@ -522,10 +588,12 @@
                     days.map(d => new Date(d.date).getDate().toString()),
                     days.map(d => Math.round((d.total_kwh || 0) * 10) / 10),
                     days.map(d => Math.round((d.consumption_kwh || 0) * 10) / 10),
+                    days.map(d => d.hp_total_kwh != null ? Math.round(d.hp_total_kwh * 10) / 10 : null),
+                    days.map(d => d.hp_solar_kwh != null ? Math.round(d.hp_solar_kwh * 10) / 10 : null),
                     days.map(d => d.min_soc != null ? Math.round(d.min_soc) : null),
                 );
                 monthlyChart.data.datasets[0].backgroundColor = 'rgba(251, 191, 36, 0.8)';
-                monthlyChart.data.datasets[2].label = 'Min Battery %';
+                monthlyChart.data.datasets[4].label = 'Min Battery %';
                 monthlyChart.options.onClick = null;
                 monthlyChart.update();
                 document.getElementById('monthlyTitle').textContent = mn[parseInt(m)-1] + ' ' + y;
