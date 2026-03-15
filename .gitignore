@@ -7,3 +7,5 @@ venv/
 .DS_Store
 .claude/
 collect.log
+test_*.py
+*.png
