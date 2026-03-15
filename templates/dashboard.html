@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solary — Solar Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: #0a0e1a;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #111827 0%, #0a0e1a 100%);
+            border-bottom: 1px solid #1e293b;
+            padding: 1.25rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .header h1 {
+            font-size: 1.4rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            background: linear-gradient(135deg, #fde68a 0%, #f59e0b 50%, #d97706 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .header .station-name { color: #64748b; font-size: 0.8rem; margin-top: 2px; }
+        .header .last-update { color: #475569; font-size: 0.7rem; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 1.25rem; }
+
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+            gap: 0.75rem;
+            margin-bottom: 1.25rem;
+        }
+        .kpi-card {
+            background: linear-gradient(145deg, #141c2e 0%, #111827 100%);
+            border-radius: 14px;
+            padding: 1.25rem;
+            border: 1px solid #1e293b;
+            transition: all 0.25s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .kpi-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 2px;
+            background: var(--accent, #334155);
+            opacity: 0.6;
+        }
+        .kpi-card:hover { border-color: #334155; transform: translateY(-1px); }
+        .kpi-label {
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #64748b;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+        .kpi-value {
+            font-size: 1.75rem;
+            font-weight: 800;
+            color: #f1f5f9;
+            letter-spacing: -0.02em;
+        }
+        .kpi-value .unit {
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: #64748b;
+            margin-left: 3px;
+        }
+        .kpi-card.live { --accent: #fbbf24; }
+        .kpi-card.live .kpi-value { color: #fbbf24; }
+        .kpi-card.production { --accent: #f59e0b; }
+        .kpi-card.consumption { --accent: #3b82f6; }
+        .kpi-card.battery { --accent: #22c55e; }
+        .kpi-card.grid-card { --accent: #8b5cf6; }
+        .kpi-card.lifetime { --accent: #64748b; }
+
+        .chart-section {
+            background: linear-gradient(145deg, #141c2e 0%, #111827 100%);
+            border-radius: 14px;
+            padding: 1.5rem;
+            border: 1px solid #1e293b;
+            margin-bottom: 1.25rem;
+        }
+        .chart-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+        .chart-header h2 {
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: #94a3b8;
+            letter-spacing: -0.01em;
+        }
+        .chart-container { position: relative; height: 280px; }
+        .btn-back {
+            display: none;
+            background: #1e293b;
+            color: #94a3b8;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 0.35rem 0.75rem;
+            cursor: pointer;
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            transition: all 0.2s;
+        }
+        .btn-back:hover { background: #334155; color: #e2e8f0; }
+
+        .inverters {
+            background: linear-gradient(145deg, #141c2e 0%, #111827 100%);
+            border-radius: 14px;
+            padding: 1.5rem;
+            border: 1px solid #1e293b;
+        }
+        .inverters h2 { font-size: 0.9rem; font-weight: 700; color: #94a3b8; margin-bottom: 1rem; }
+        .inv-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid #1e293b;
+            font-size: 0.85rem;
+        }
+        .inv-row:last-child { border-bottom: none; }
+        .inv-status {
+            display: inline-block;
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .inv-status.online { background: #22c55e; box-shadow: 0 0 8px #22c55e66; }
+        .inv-status.offline { background: #ef4444; box-shadow: 0 0 8px #ef444466; }
+
+        @media (max-width: 640px) {
+            .container { padding: 0.75rem; }
+            .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 0.5rem; }
+            .kpi-value { font-size: 1.4rem; }
+            .kpi-card { padding: 1rem; }
+            .chart-container { height: 220px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <h1>Solary</h1>
+            <div class="station-name" id="stationName">Loading...</div>
+        </div>
+        <div class="last-update" id="lastUpdate"></div>
+    </div>
+
+    <div class="container">
+        <div class="kpi-grid">
+            <div class="kpi-card live">
+                <div class="kpi-label">Current Output</div>
+                <div class="kpi-value"><span id="currentPower">--</span><span class="unit">W</span></div>
+            </div>
+            <div class="kpi-card production">
+                <div class="kpi-label">Produced Today</div>
+                <div class="kpi-value"><span id="todayKwh">--</span><span class="unit">kWh</span></div>
+            </div>
+            <div class="kpi-card consumption">
+                <div class="kpi-label">Consumed Today</div>
+                <div class="kpi-value"><span id="consumptionKwh">--</span><span class="unit">kWh</span></div>
+            </div>
+            <div class="kpi-card battery">
+                <div class="kpi-label">Battery</div>
+                <div class="kpi-value"><span id="batterySoc">--</span><span class="unit">%</span></div>
+            </div>
+            <div class="kpi-card grid-card">
+                <div class="kpi-label">Grid Buy / Sell</div>
+                <div class="kpi-value" style="font-size:1.3rem"><span id="buyKwh">--</span><span class="unit">kWh</span> / <span id="sellKwh">--</span><span class="unit">kWh</span></div>
+            </div>
+            <div class="kpi-card lifetime">
+                <div class="kpi-label">Lifetime</div>
+                <div class="kpi-value"><span id="totalKwh">--</span><span class="unit">kWh</span></div>
+            </div>
+        </div>
+
+        <div class="chart-section">
+            <div class="chart-header"><h2>Today's Production</h2></div>
+            <div class="chart-container">
+                <canvas id="todayChart"></canvas>
+            </div>
+        </div>
+
+        <div class="chart-section">
+            <div class="chart-header"><h2>Last 30 Days</h2></div>
+            <div class="chart-container">
+                <canvas id="historyChart"></canvas>
+            </div>
+        </div>
+
+        <div class="chart-section">
+            <div class="chart-header">
+                <h2 id="monthlyTitle">Monthly Overview</h2>
+                <button class="btn-back" id="monthlyBack">Back to months</button>
+            </div>
+            <div class="chart-container">
+                <canvas id="monthlyChart"></canvas>
+            </div>
+        </div>
+
+        <div class="inverters" id="inverterSection" style="display:none;">
+            <h2>Inverters</h2>
+            <div id="inverterList"></div>
+        </div>
+    </div>
+
+    <script>
+        let todayChart, historyChart, monthlyChart;
+        let monthlyData = [];
+
+        // Shared tooltip styling
+        const tooltipStyle = {
+            backgroundColor: '#1e293b',
+            titleColor: '#f1f5f9',
+            bodyColor: '#cbd5e1',
+            borderColor: '#334155',
+            borderWidth: 1,
+            cornerRadius: 8,
+            padding: 10,
+            titleFont: { weight: '600', size: 12 },
+            bodyFont: { size: 11 },
+        };
+
+        function initCharts() {
+            // --- Today's Production ---
+            todayChart = new Chart(document.getElementById('todayChart'), {
+                type: 'line',
+                data: { labels: [], datasets: [{
+                    label: 'Power (W)',
+                    data: [],
+                    borderColor: '#fbbf24',
+                    backgroundColor: (ctx) => {
+                        const g = ctx.chart.ctx.createLinearGradient(0, 0, 0, ctx.chart.height);
+                        g.addColorStop(0, 'rgba(251, 191, 36, 0.25)');
+                        g.addColorStop(1, 'rgba(251, 191, 36, 0.0)');
+                        return g;
+                    },
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 0,
+                    pointHitRadius: 10,
+                    borderWidth: 2.5,
+                }]},
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { ...tooltipStyle, callbacks: {
+                            label: (c) => `${c.parsed.y.toLocaleString()} W`
+                        }},
+                    },
+                    scales: {
+                        x: { ticks: { color: '#475569', font: { size: 10 } }, grid: { color: '#1e293b22' } },
+                        y: { ticks: { color: '#475569', font: { size: 10 } }, grid: { color: '#1e293b' }, beginAtZero: true,
+                            title: { display: true, text: 'Watts', color: '#475569', font: { size: 10 } } },
+                    },
+                },
+            });
+
+            // --- Last 30 Days ---
+            historyChart = new Chart(document.getElementById('historyChart'), {
+                type: 'bar',
+                data: { labels: [], datasets: [
+                    {
+                        label: 'Production',
+                        data: [],
+                        backgroundColor: 'rgba(245, 158, 11, 0.75)',
+                        hoverBackgroundColor: '#fbbf24',
+                        borderRadius: 5,
+                        borderSkipped: false,
+                        yAxisID: 'y',
+                        order: 2,
+                    },
+                    {
+                        label: 'Consumption',
+                        data: [],
+                        backgroundColor: 'rgba(59, 130, 246, 0.65)',
+                        hoverBackgroundColor: '#60a5fa',
+                        borderRadius: 5,
+                        borderSkipped: false,
+                        yAxisID: 'y',
+                        order: 3,
+                    },
+                    {
+                        label: 'Min Battery %',
+                        data: [],
+                        type: 'bar',
+                        backgroundColor: 'rgba(34, 197, 94, 0.5)',
+                        hoverBackgroundColor: '#4ade80',
+                        borderRadius: 5,
+                        borderSkipped: false,
+                        yAxisID: 'y1',
+                        order: 1,
+                    },
+                ]},
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            align: 'end',
+                            labels: { color: '#64748b', boxWidth: 10, boxHeight: 10, borderRadius: 3, useBorderRadius: true, padding: 14, font: { size: 11, weight: '500' } },
+                        },
+                        tooltip: { ...tooltipStyle, callbacks: {
+                            label: (c) => { const unit = c.datasetIndex === 2 ? '%' : ' kWh'; return `${c.dataset.label}: ${c.parsed.y}${unit}`; }
+                        }},
+                    },
+                    scales: {
+                        x: { ticks: { color: '#475569', font: { size: 10 } }, grid: { display: false } },
+                        y: { position: 'left', ticks: { color: '#475569', font: { size: 10 } }, grid: { color: '#1e293b' }, beginAtZero: true,
+                            title: { display: true, text: 'kWh', color: '#475569', font: { size: 10 } } },
+                        y1: { position: 'right', ticks: { color: '#22c55e88', font: { size: 10 } }, grid: { drawOnChartArea: false }, beginAtZero: true, max: 100,
+                            title: { display: true, text: 'Battery %', color: '#22c55e88', font: { size: 10 } } },
+                    },
+                },
+            });
+
+            // --- Monthly Overview ---
+            monthlyChart = new Chart(document.getElementById('monthlyChart'), {
+                type: 'bar',
+                data: { labels: [], datasets: [
+                    {
+                        label: 'Production',
+                        data: [],
+                        backgroundColor: 'rgba(245, 158, 11, 0.75)',
+                        hoverBackgroundColor: '#fbbf24',
+                        borderRadius: 5,
+                        borderSkipped: false,
+                        yAxisID: 'y',
+                        order: 2,
+                    },
+                    {
+                        label: 'Consumption',
+                        data: [],
+                        backgroundColor: 'rgba(59, 130, 246, 0.65)',
+                        hoverBackgroundColor: '#60a5fa',
+                        borderRadius: 5,
+                        borderSkipped: false,
+                        yAxisID: 'y',
+                        order: 3,
+                    },
+                    {
+                        label: 'Avg Min Battery %',
+                        data: [],
+                        type: 'bar',
+                        backgroundColor: 'rgba(34, 197, 94, 0.5)',
+                        hoverBackgroundColor: '#4ade80',
+                        borderRadius: 5,
+                        borderSkipped: false,
+                        yAxisID: 'y1',
+                        order: 1,
+                    },
+                ]},
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    onClick: handleMonthlyClick,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            align: 'end',
+                            labels: {
+                                color: '#64748b',
+                                boxWidth: 10,
+                                boxHeight: 10,
+                                borderRadius: 3,
+                                useBorderRadius: true,
+                                padding: 14,
+                                font: { size: 11, weight: '500' },
+                            },
+                        },
+                        tooltip: { ...tooltipStyle, callbacks: {
+                            label: (c) => {
+                                const unit = c.datasetIndex === 2 ? '%' : ' kWh';
+                                return `${c.dataset.label}: ${c.parsed.y}${unit}`;
+                            }
+                        }},
+                    },
+                    scales: {
+                        x: { ticks: { color: '#475569', font: { size: 10 } }, grid: { display: false } },
+                        y: {
+                            position: 'left',
+                            ticks: { color: '#475569', font: { size: 10 } },
+                            grid: { color: '#1e293b' },
+                            beginAtZero: true,
+                            title: { display: true, text: 'kWh', color: '#475569', font: { size: 10 } },
+                        },
+                        y1: {
+                            position: 'right',
+                            ticks: { color: '#22c55e88', font: { size: 10 } },
+                            grid: { drawOnChartArea: false },
+                            beginAtZero: true,
+                            max: 100,
+                            title: { display: true, text: 'Battery %', color: '#22c55e88', font: { size: 10 } },
+                        },
+                    },
+                },
+            });
+
+            document.getElementById('monthlyBack').addEventListener('click', showMonthlyView);
+        }
+
+        // --- Data fetching ---
+
+        async function fetchCurrent() {
+            try {
+                const data = await (await fetch('/api/current')).json();
+                if (!data.current_power_w && data.current_power_w !== 0) return;
+                document.getElementById('currentPower').textContent = Math.round(data.current_power_w).toLocaleString();
+                document.getElementById('todayKwh').textContent = Number(data.today_kwh).toFixed(1);
+                document.getElementById('totalKwh').textContent = Number(data.total_kwh).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+                document.getElementById('consumptionKwh').textContent = Number(data.consumption_kwh || 0).toFixed(1);
+                document.getElementById('buyKwh').textContent = Number(data.buy_kwh || 0).toFixed(1);
+                document.getElementById('sellKwh').textContent = Number(data.sell_kwh || 0).toFixed(1);
+                document.getElementById('batterySoc').textContent = data.min_soc != null ? Number(data.min_soc).toFixed(0) : '--';
+                document.getElementById('stationName').textContent = data.station_name || '';
+                document.getElementById('lastUpdate').textContent = 'Updated ' + new Date().toLocaleTimeString();
+
+                if (data.inverters && data.inverters.length) {
+                    document.getElementById('inverterSection').style.display = '';
+                    document.getElementById('inverterList').innerHTML = data.inverters.map(inv => `
+                        <div class="inv-row">
+                            <div><span class="inv-status ${inv.status === 1 ? 'online' : 'offline'}"></span>${inv.name || inv.sn}</div>
+                            <div>${inv.power || 0} W &nbsp; ${inv.temp || '--'}&deg;C</div>
+                        </div>
+                    `).join('');
+                }
+            } catch (e) { console.error('fetchCurrent:', e); }
+        }
+
+        async function fetchToday() {
+            try {
+                const data = await (await fetch('/api/today')).json();
+                if (!data.length) return;
+                todayChart.data.labels = data.map(d => new Date(d.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+                todayChart.data.datasets[0].data = data.map(d => d.current_power_w);
+                todayChart.update();
+            } catch (e) { console.error('fetchToday:', e); }
+        }
+
+        async function fetchHistory() {
+            try {
+                const data = await (await fetch('/api/history')).json();
+                if (!data.length) return;
+                historyChart.data.labels = data.map(d => new Date(d.date).toLocaleDateString([], { month: 'short', day: 'numeric' }));
+                historyChart.data.datasets[0].data = data.map(d => d.total_kwh);
+                historyChart.data.datasets[1].data = data.map(d => Math.round((d.consumption_kwh || 0) * 10) / 10);
+                historyChart.data.datasets[2].data = data.map(d => d.min_soc != null ? Math.round(d.min_soc) : null);
+                historyChart.update();
+            } catch (e) { console.error('fetchHistory:', e); }
+        }
+
+        async function fetchMonthly() {
+            try {
+                monthlyData = await (await fetch('/api/monthly')).json();
+                showMonthlyView();
+            } catch (e) { console.error('fetchMonthly:', e); }
+        }
+
+        // --- Monthly chart helpers ---
+
+        function updateMonthlyChart(labels, production, consumption, battery) {
+            monthlyChart.data.labels = labels;
+            monthlyChart.data.datasets[0].data = production;
+            monthlyChart.data.datasets[1].data = consumption;
+            monthlyChart.data.datasets[2].data = battery;
+            monthlyChart.update();
+        }
+
+        function showMonthlyView() {
+            if (!monthlyData.length) return;
+            const mn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            updateMonthlyChart(
+                monthlyData.map(d => { const [y, m] = d.month.split('-'); return mn[parseInt(m)-1] + ' ' + y; }),
+                monthlyData.map(d => Math.round((d.total_kwh || 0) * 10) / 10),
+                monthlyData.map(d => Math.round((d.consumption_kwh || 0) * 10) / 10),
+                monthlyData.map(d => d.min_soc != null ? Math.round(d.min_soc) : null),
+            );
+            monthlyChart.data.datasets[0].backgroundColor = 'rgba(245, 158, 11, 0.75)';
+            monthlyChart.data.datasets[2].label = 'Avg Min Battery %';
+            monthlyChart.options.onClick = handleMonthlyClick;
+            monthlyChart.update();
+            document.getElementById('monthlyTitle').textContent = 'Monthly Overview';
+            document.getElementById('monthlyBack').style.display = 'none';
+        }
+
+        async function handleMonthlyClick(evt, elements) {
+            if (!elements.length) return;
+            const idx = elements[0].index;
+            const month = monthlyData[idx].month;
+            const mn = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+            const [y, m] = month.split('-');
+
+            try {
+                const days = await (await fetch('/api/month/' + month)).json();
+                if (!days.length) return;
+                updateMonthlyChart(
+                    days.map(d => new Date(d.date).getDate().toString()),
+                    days.map(d => Math.round((d.total_kwh || 0) * 10) / 10),
+                    days.map(d => Math.round((d.consumption_kwh || 0) * 10) / 10),
+                    days.map(d => d.min_soc != null ? Math.round(d.min_soc) : null),
+                );
+                monthlyChart.data.datasets[0].backgroundColor = 'rgba(251, 191, 36, 0.8)';
+                monthlyChart.data.datasets[2].label = 'Min Battery %';
+                monthlyChart.options.onClick = null;
+                monthlyChart.update();
+                document.getElementById('monthlyTitle').textContent = mn[parseInt(m)-1] + ' ' + y;
+                document.getElementById('monthlyBack').style.display = '';
+            } catch (e) { console.error('handleMonthlyClick:', e); }
+        }
+
+        // --- Init ---
+
+        async function refresh() {
+            await Promise.all([fetchCurrent(), fetchToday(), fetchHistory(), fetchMonthly()]);
+        }
+
+        initCharts();
+        refresh();
+        setInterval(refresh, 60000);
+    </script>
+</body>
+</html>
